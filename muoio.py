@@ -27,12 +27,39 @@ def identity(x):
 def not_none(x):
   return x is not None
 
+from collections import defaultdict
 
 class Piper(Pipe):
+
+
   def __call__(self, gen):
     return self.chain_in(gen)
+
   def __getitem__(self, arg):
-    if isinstance(arg, slice):
+    if isinstance(arg, tuple):
+      matchers = defaultdict(list)
+      for case in arg:
+        if isinstance(case, slice):
+          matchers[
+            case.start # match on this type
+          ].append((
+            case.stop, # if this condition(x) is true or condition is None
+            case.step  # using this transformation if callable or this value
+          ))
+      def func(x):
+        key = type(x) if x is not None else None
+        if key not in matchers:
+          key = None
+        M = matchers[key]
+        for (condition, transform) in M:
+          if (condition is None) or( callable(condition) and condition(x)):
+            if callable(transform):
+              return transform(x)
+            else:
+              return transform
+        return None
+      return self.chain(func)
+    elif isinstance(arg, slice):
       condition = (
           arg.start          if callable(arg.start) else (
           not_none
@@ -55,4 +82,39 @@ class Piper(Pipe):
             yield no_transform(x)
       return self.chain_in(gen)
 
+
+# P
+#   [
+#     Ta :: fa,
+#     Tb :: fb,
+#     Tc :condition: fc,
+#     : f_star
+#   ]
+
+#   [ 
+#     # matching types and mapping with functions
+#     str   :: lambda x : (int(a),[a]),
+#     list  :: lambda x : (len(a),[]),
+
+#     # matching types and mapping to values
+#     tuple :: (0,["tuppy"])
+
+#     # matching types and conditionally mapping
+#     float : lambda x: x>0 : lambda x : (int(-a),[]),
+#     float :: lambda x : (int(a),[]),
+
+#     int   : lambda x: x>0 : lambda x : (-a,[]),
+#     int   :: lambda x : (a,[]),
+
+#     # explicit removal of dicts from the pipeline
+#     dict :: None,
     
+#     # default matcher
+#     :: (0,[])
+#   ]
+  
+#   [
+#     int : lambda x: x==1 : 1
+#     # recursive case, yield back
+#     int, :: lambda x,block=None : x * block(x-1)
+#   ]
